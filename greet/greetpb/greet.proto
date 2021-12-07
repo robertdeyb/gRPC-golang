@@ -1,5 +1,6 @@
 syntax = "proto3";
 package greet;
+//location of the packet you want to implement
 option go_package="./greet/greetpb";
 
 message Greeting {
