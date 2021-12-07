@@ -4,8 +4,7 @@
 ## Install Protoc: https://github.com/google/protobuf/releases
 
 # Setup sample project
-## go mod init to a folder
-## cd <project>
+## go mod init to a project folder
 ## Install grpc: go get google.golang.org/gr 
 ## Install protobuf: go get google.golang.org/protobuf/reflect/protoreflect@v1.25.0
 
