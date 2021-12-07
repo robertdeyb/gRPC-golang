@@ -1,0 +1,23 @@
+syntax = "proto3";
+package greet;
+//location of the packet you want to implement
+option go_package="./calculator/calculatorpb";
+
+message Calculate {
+    int64 first_num = 1;
+    int64 last_num = 2;
+}
+
+message CalculatorRequest {
+    Calculate calculate = 1;
+}
+
+message CalculatorResponse {
+    int64 result = 1;
+}
+
+service CalculatorService {
+    //Unary name Calculate
+    rpc Calculator(CalculatorRequest) returns (CalculatorResponse) {};
+}
+
