@@ -35,7 +35,7 @@ func main() {
 	//if we crash something, we get the file and error number
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var cfg config
-	flag.StringVar(&cfg.db.dsn, "dsn", "postgres://postgres:root@localhost/go_movies?sslmode=disable", "Postgres connection string")
+	flag.StringVar(&cfg.db.dsn, "dsn", "postgres://postgres:root@localhost/blogs?sslmode=disable", "Postgres connection string")
 	db, err := openDB(cfg)
 	fmt.Println("Connecting to Posgres")
 	if err != nil {
