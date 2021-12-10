@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net"
 
 	"go-grpc/blog/blogpb"
@@ -12,6 +13,13 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
+
+type blogItem struct {
+	ID       int    `json:"id"`
+	AuthorID string `json:"author_id"`
+	Content  string `json:"content"`
+	Title    string `json:"title"`
+}
 
 const (
 	host     = "localhost"
@@ -26,23 +34,117 @@ type server struct {
 }
 
 func (connection *server) CreateBlog(ctx context.Context, req *blogpb.CreateBlogRequest) (*blogpb.CreateBlogResponse, error) {
+
 	db := connection.conn
 	blog := req.GetBlog()
-	authorId := blog.GetAuthorId()
-	title := blog.GetTitle()
-	content := blog.GetContent()
-	sqlStatement := `INSERT INTO "blogs" (author_id, title, content) VALUES ($1, $2, $3)`
-	if _, err := db.Exec(sqlStatement, authorId, title, content); err != nil {
+	data := blogItem{
+		AuthorID: blog.GetAuthorId(),
+		Title:    blog.GetTitle(),
+		Content:  blog.GetContent(),
+	}
+	query := `INSERT INTO "blogs" (author_id, title, content) VALUES ($1, $2, $3) RETURNING id`
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer stmt.Close()
+	lastInsertId := int64(0)
+	if err = stmt.QueryRow(data.AuthorID, data.Title, data.Content).Scan(&lastInsertId); err != nil {
 		return nil, errors.Wrap(err, "Blog couldn't be inserted")
 	}
 	return &blogpb.CreateBlogResponse{
 		Blog: &blogpb.Blog{
-			Id:       1,
+			Id:       lastInsertId,
 			AuthorId: blog.GetAuthorId(),
 			Title:    blog.GetTitle(),
 			Content:  blog.GetContent(),
 		},
 	}, nil
+}
+
+func (connection *server) ReadBlog(ctx context.Context, req *blogpb.ReadBlogRequest) (*blogpb.ReadBlogResponse, error) {
+
+	db := connection.conn
+	id := req.GetBlogId()
+	sqlStatement := `select author_id, title, content from "blogs" where id=$1`
+	var author_id, title, content string
+	err := db.QueryRow(sqlStatement, id).Scan(&author_id, &title, &content)
+	if err != nil {
+		errors.Wrap(err, "Blog couldn't be returned")
+	}
+	return &blogpb.ReadBlogResponse{
+		Blog: &blogpb.Blog{
+			Id:       id,
+			AuthorId: author_id,
+			Title:    title,
+			Content:  content,
+		},
+	}, nil
+}
+
+func (connection *server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*blogpb.UpdateBlogResponse, error) {
+	fmt.Println("Update blog request")
+	blog := req.GetBlog()
+
+	// create an empty struct
+	data := &blogItem{}
+
+	// we update our internal struct
+	data.AuthorID = blog.GetAuthorId()
+	data.Content = blog.GetContent()
+	data.Title = blog.GetTitle()
+	data.ID = int(blog.GetId())
+	db := connection.conn
+	sqlStatement := `UPDATE "blogs" SET author_id=$1, title=$2,content=$3 WHERE "id" =$4;`
+	if _, err := db.Exec(sqlStatement, data.AuthorID, data.Content, data.Title, data.ID); err != nil {
+		return nil, err
+	}
+	return &blogpb.UpdateBlogResponse{
+		Blog: &blogpb.Blog{
+			Id:       int64(data.ID),
+			AuthorId: data.AuthorID,
+			Title:    data.Title,
+			Content:  data.Content,
+		},
+	}, nil
+
+}
+
+func (connection *server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*blogpb.DeleteBlogResponse, error) {
+	fmt.Println("Delete blog request")
+	db := connection.conn
+	id := req.GetBlogId()
+	sqlStatement := `delete from "blogs" where id=$1`
+	if _, err := db.Exec(sqlStatement, id); err != nil {
+		errors.Wrap(err, "Blog couldn't be deleted")
+	}
+	return &blogpb.DeleteBlogResponse{BlogId: req.GetBlogId()}, nil
+}
+
+func (connection *server) ListBlog(_ *blogpb.ListBlogRequest, stream blogpb.BlogService_ListBlogServer) error {
+	fmt.Println("List blog request")
+	db := connection.conn
+	sqlStatement := `select * from "blogs"`
+	result, err := db.Query(sqlStatement)
+	defer result.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
+	for result.Next() {
+		var id int64
+		var author_id, title, content string
+		if err = result.Scan(&author_id, &title, &content, &id); err != nil {
+			errors.Wrap(err, "Blogs couln't be listed")
+		}
+
+		stream.Send(&blogpb.ListBlogResponse{Blog: &blogpb.Blog{
+			AuthorId: author_id,
+			Title:    title,
+			Content:  content,
+			Id:       id,
+		}})
+	}
+	return nil
 }
 
 func main() {
